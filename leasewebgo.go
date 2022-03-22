@@ -1,4 +1,4 @@
-package packngo
+package leasewebgo
 
 import (
 	"bytes"
@@ -13,59 +13,33 @@ import (
 	"net/url"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
-	"time"
 )
 
 const (
-	authTokenEnvVar = "PACKET_AUTH_TOKEN"
-	baseURL         = "https://api.equinix.com/metal/v1/"
+	authTokenEnvVar = "LEASEWEB_AUTH_TOKEN"
+	baseURL         = "https://api.leaseweb.com/"
 	mediaType       = "application/json"
-	debugEnvVar     = "PACKNGO_DEBUG"
+	debugEnvVar     = "LEASEWEBGO_DEBUG"
 
-	headerRateLimit              = "X-RateLimit-Limit"
-	headerRateRemaining          = "X-RateLimit-Remaining"
-	headerRateReset              = "X-RateLimit-Reset"
 	expectedAPIContentTypePrefix = "application/json"
 )
 
 // meta contains pagination information
 type meta struct {
-	Self           *Href `json:"self"`
-	First          *Href `json:"first"`
-	Last           *Href `json:"last"`
-	Previous       *Href `json:"previous,omitempty"`
-	Next           *Href `json:"next,omitempty"`
-	Total          int   `json:"total"`
-	CurrentPageNum int   `json:"current_page"`
-	LastPageNum    int   `json:"last_page"`
+	Limit      int `json:"limit"`
+	Offset     int `json:"offset"`
+	Totalcount int `json:"totalCount"`
 }
 
 // Response is the http response from api calls
 type Response struct {
 	*http.Response
-	Rate
 }
 
 // Href is an API link
 type Href struct {
 	Href string `json:"href"`
-}
-
-func (r *Response) populateRate() {
-	// parse the rate limit headers and populate Response.Rate
-	if limit := r.Header.Get(headerRateLimit); limit != "" {
-		r.Rate.RequestLimit, _ = strconv.Atoi(limit)
-	}
-	if remaining := r.Header.Get(headerRateRemaining); remaining != "" {
-		r.Rate.RequestsRemaining, _ = strconv.Atoi(remaining)
-	}
-	if reset := r.Header.Get(headerRateReset); reset != "" {
-		if v, _ := strconv.ParseInt(reset, 10, 64); v != 0 {
-			r.Rate.Reset = Timestamp{time.Unix(v, 0)}
-		}
-	}
 }
 
 // ErrorResponse is the http response used on errors
@@ -91,45 +65,8 @@ type Client struct {
 	ConsumerToken string
 	APIKey        string
 
-	RateLimit Rate
-
-	// Equinix Metal Api Objects
-	APIKeys                APIKeyService
-	BGPConfig              BGPConfigService
-	BGPSessions            BGPSessionService
-	Batches                BatchService
-	CapacityService        CapacityService
-	Connections            ConnectionService
-	DeviceIPs              DeviceIPService
-	Devices                DeviceService
-	Emails                 EmailService
-	Events                 EventService
-	Facilities             FacilityService
-	HardwareReservations   HardwareReservationService
-	Metros                 MetroService
-	Notifications          NotificationService
-	OperatingSystems       OSService
-	Organizations          OrganizationService
-	Plans                  PlanService
-	Ports                  PortService
-	ProjectIPs             ProjectIPService
-	ProjectVirtualNetworks ProjectVirtualNetworkService
-	Projects               ProjectService
-	SSHKeys                SSHKeyService
-	SpotMarket             SpotMarketService
-	SpotMarketRequests     SpotMarketRequestService
-	MetalGateways          MetalGatewayService
-	TwoFactorAuth          TwoFactorAuthService
-	Users                  UserService
-	VirtualCircuits        VirtualCircuitService
-	VLANAssignments        VLANAssignmentService
-	VolumeAttachments      VolumeAttachmentService
-	Volumes                VolumeService
-
-	// DevicePorts
-	//
-	// Deprecated: Use Client.Ports or Device methods
-	DevicePorts DevicePortService
+	// Leaseweb Api Objects
+	DedicatedServer DedicatedServerService
 }
 
 // requestDoer provides methods for making HTTP requests and receiving the
@@ -192,12 +129,10 @@ func (c *Client) Do(req *http.Request, v interface{}) (*Response, error) {
 	defer resp.Body.Close()
 
 	response := Response{Response: resp}
-	response.populateRate()
 	if c.debug {
 		dumpResponse(response.Response)
 	}
 	dumpDeprecation(response.Response)
-	c.RateLimit = response.Rate
 
 	err = checkResponse(resp)
 	// if the response is an error, return the ErrorResponse
@@ -363,38 +298,7 @@ func NewClientWithBaseURL(consumerToken string, apiKey string, httpClient *http.
 	}
 
 	c := &Client{client: httpClient, BaseURL: u, UserAgent: UserAgent, ConsumerToken: consumerToken, APIKey: apiKey}
-	c.APIKeys = &APIKeyServiceOp{client: c}
-	c.BGPConfig = &BGPConfigServiceOp{client: c}
-	c.BGPSessions = &BGPSessionServiceOp{client: c}
-	c.Batches = &BatchServiceOp{client: c}
-	c.CapacityService = &CapacityServiceOp{client: c}
-	c.Connections = &ConnectionServiceOp{client: c}
-	c.DeviceIPs = &DeviceIPServiceOp{client: c}
-	c.DevicePorts = &DevicePortServiceOp{client: c}
-	c.Devices = &DeviceServiceOp{client: c}
-	c.Emails = &EmailServiceOp{client: c}
-	c.Events = &EventServiceOp{client: c}
-	c.Facilities = &FacilityServiceOp{client: c}
-	c.HardwareReservations = &HardwareReservationServiceOp{client: c}
-	c.Metros = &MetroServiceOp{client: c}
-	c.Notifications = &NotificationServiceOp{client: c}
-	c.OperatingSystems = &OSServiceOp{client: c}
-	c.Organizations = &OrganizationServiceOp{client: c}
-	c.Plans = &PlanServiceOp{client: c}
-	c.Ports = &PortServiceOp{client: c}
-	c.ProjectIPs = &ProjectIPServiceOp{client: c}
-	c.ProjectVirtualNetworks = &ProjectVirtualNetworkServiceOp{client: c}
-	c.Projects = &ProjectServiceOp{client: c}
-	c.SSHKeys = &SSHKeyServiceOp{client: c}
-	c.SpotMarket = &SpotMarketServiceOp{client: c}
-	c.SpotMarketRequests = &SpotMarketRequestServiceOp{client: c}
-	c.MetalGateways = &MetalGatewayServiceOp{client: c}
-	c.TwoFactorAuth = &TwoFactorAuthServiceOp{client: c}
-	c.Users = &UserServiceOp{client: c}
-	c.VirtualCircuits = &VirtualCircuitServiceOp{client: c}
-	c.VolumeAttachments = &VolumeAttachmentServiceOp{client: c}
-	c.Volumes = &VolumeServiceOp{client: c}
-	c.VLANAssignments = &VLANAssignmentServiceOp{client: c}
+	c.DedicatedServer = &DedicatedServerServiceOp{client: c}
 	c.debug = os.Getenv(debugEnvVar) != ""
 
 	return c, nil

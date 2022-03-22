@@ -1,4 +1,4 @@
-package packngo
+package leasewebgo
 
 import (
 	"errors"

@@ -1,4 +1,4 @@
-package packngo
+package leasewebgo
 
 import "runtime/debug"
 
@@ -29,7 +29,7 @@ func init() {
 					Version = v
 				}
 			}
-			UserAgent = "packngo/" + Version
+			UserAgent = "leasewebgo/" + Version
 			break
 		}
 	}

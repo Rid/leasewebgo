@@ -19,6 +19,3 @@ build:
 lint:
 	@docker run --rm -v $(CURDIR):/app -w /app golangci/golangci-lint:v1.34.1 golangci-lint run -v
 
-test:
-	$(GO) test ./...
-
