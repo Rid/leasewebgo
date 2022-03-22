@@ -1,4 +1,4 @@
-module github.com/packethost/packngo
+module github.com/rid/leasewebgo
 
 require (
 	github.com/dnaeon/go-vcr v1.0.1
