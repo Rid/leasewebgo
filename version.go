@@ -11,7 +11,7 @@ var (
 	UserAgent = "packngo/(devel)"
 )
 
-const packagePath = "github.com/packethost/packngo"
+const packagePath = "github.com/rid/leasewebgo"
 
 // init finds packngo in the dependency so the package Version can be properly
 // reflected in API UserAgent headers and client introspection

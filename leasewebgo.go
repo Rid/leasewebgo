@@ -61,12 +61,12 @@ type Client struct {
 
 	BaseURL *url.URL
 
-	UserAgent     string
-	ConsumerToken string
-	APIKey        string
+	UserAgent string
+	APIKey    string
 
 	// Leaseweb Api Objects
 	DedicatedServer DedicatedServerService
+	FloatingIps     FloatingIpsService
 }
 
 // requestDoer provides methods for making HTTP requests and receiving the
@@ -76,7 +76,7 @@ type Client struct {
 // Client object.
 type requestDoer interface {
 	NewRequest(method, path string, body interface{}) (*http.Request, error)
-	Do(req *http.Request, v interface{}) (*Response, error)
+	Do(req *http.Request, v interface{}) (*Response, []byte, error)
 	DoRequest(method, path string, body, v interface{}) (*Response, error)
 	DoRequestWithHeader(method string, headers map[string]string, path string, body, v interface{}) (*Response, error)
 }
@@ -110,8 +110,7 @@ func (c *Client) NewRequest(method, path string, body interface{}) (*http.Reques
 
 	req.Close = true
 
-	req.Header.Add("X-Auth-Token", c.APIKey)
-	req.Header.Add("X-Consumer-Token", c.ConsumerToken)
+	req.Header.Add("x-lsw-auth", c.APIKey)
 
 	req.Header.Add("Content-Type", mediaType)
 	req.Header.Add("Accept", mediaType)
@@ -120,10 +119,11 @@ func (c *Client) NewRequest(method, path string, body interface{}) (*http.Reques
 }
 
 // Do executes the http request
-func (c *Client) Do(req *http.Request, v interface{}) (*Response, error) {
+func (c *Client) Do(req *http.Request, v interface{}) (*Response, []byte, error) {
 	resp, err := c.client.Do(req)
+	body, _ := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, body, err
 	}
 
 	defer resp.Body.Close()
@@ -137,7 +137,7 @@ func (c *Client) Do(req *http.Request, v interface{}) (*Response, error) {
 	err = checkResponse(resp)
 	// if the response is an error, return the ErrorResponse
 	if err != nil {
-		return &response, err
+		return &response, body, err
 	}
 
 	if v != nil {
@@ -145,17 +145,17 @@ func (c *Client) Do(req *http.Request, v interface{}) (*Response, error) {
 		if w, ok := v.(io.Writer); ok {
 			_, err = io.Copy(w, resp.Body)
 			if err != nil {
-				return &response, err
+				return &response, body, err
 			}
 		} else {
-			err = json.NewDecoder(resp.Body).Decode(v)
+			err = json.Unmarshal(body, v)
 			if err != nil {
-				return &response, err
+				return &response, body, err
 			}
 		}
 	}
 
-	return &response, err
+	return &response, body, err
 }
 
 // dumpDeprecation logs headers defined by
@@ -238,19 +238,19 @@ func dumpRequest(req *http.Request) {
 
 // DoRequest is a convenience method, it calls NewRequest followed by Do
 // v is the interface to unmarshal the response JSON into
-func (c *Client) DoRequest(method, path string, body, v interface{}) (*Response, error) {
+func (c *Client) DoRequest(method, path string, body, v interface{}) (*Response, []byte, error) {
 	req, err := c.NewRequest(method, path, body)
 	if c.debug {
 		dumpRequest(req)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	return c.Do(req, v)
 }
 
 // DoRequestWithHeader same as DoRequest
-func (c *Client) DoRequestWithHeader(method string, headers map[string]string, path string, body, v interface{}) (*Response, error) {
+func (c *Client) DoRequestWithHeader(method string, headers map[string]string, path string, body, v interface{}) (*Response, []byte, error) {
 	req, err := c.NewRequest(method, path, body)
 	for k, v := range headers {
 		req.Header.Add(k, v)
@@ -260,7 +260,7 @@ func (c *Client) DoRequestWithHeader(method string, headers map[string]string, p
 		dumpRequest(req)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	return c.Do(req, v)
 }
@@ -271,7 +271,7 @@ func NewClient() (*Client, error) {
 	if apiToken == "" {
 		return nil, fmt.Errorf("you must export %s", authTokenEnvVar)
 	}
-	c := NewClientWithAuth("packngo lib", apiToken, nil)
+	c := NewClientWithAuth(apiToken, nil)
 	return c, nil
 
 }
@@ -280,14 +280,14 @@ func NewClient() (*Client, error) {
 // N.B.: Equinix Metal's API certificate requires Go 1.5+ to successfully parse. If you are using
 // an older version of Go, pass in a custom http.Client with a custom TLS configuration
 // that sets "InsecureSkipVerify" to "true"
-func NewClientWithAuth(consumerToken string, apiKey string, httpClient *http.Client) *Client {
-	client, _ := NewClientWithBaseURL(consumerToken, apiKey, httpClient, baseURL)
+func NewClientWithAuth(apiKey string, httpClient *http.Client) *Client {
+	client, _ := NewClientWithBaseURL(apiKey, httpClient, baseURL)
 	return client
 }
 
 // NewClientWithBaseURL returns a Client pointing to nonstandard API URL, e.g.
 // for mocking the remote API
-func NewClientWithBaseURL(consumerToken string, apiKey string, httpClient *http.Client, apiBaseURL string) (*Client, error) {
+func NewClientWithBaseURL(apiKey string, httpClient *http.Client, apiBaseURL string) (*Client, error) {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
@@ -297,8 +297,9 @@ func NewClientWithBaseURL(consumerToken string, apiKey string, httpClient *http.
 		return nil, err
 	}
 
-	c := &Client{client: httpClient, BaseURL: u, UserAgent: UserAgent, ConsumerToken: consumerToken, APIKey: apiKey}
+	c := &Client{client: httpClient, BaseURL: u, UserAgent: UserAgent, APIKey: apiKey}
 	c.DedicatedServer = &DedicatedServerServiceOp{client: c}
+	c.FloatingIps = &FloatingIpsServiceOp{client: c}
 	c.debug = os.Getenv(debugEnvVar) != ""
 
 	return c, nil

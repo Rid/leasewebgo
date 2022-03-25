@@ -28,3 +28,6 @@ _testmain.go
 # IDEs
 .idea**/**
 .vscode
+
+examples/go*
+examples/examples

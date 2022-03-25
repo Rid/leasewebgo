@@ -9,7 +9,7 @@ type DedicatedServerServiceOp struct {
 
 // DedicatedServerService interface defines available device methods
 type DedicatedServerService interface {
-	List(opts *ListOptions) ([]DedicatedServer, *Response, error)
+	List(opts *ListOptions) (*dedicatedServersRoot, *Response, []byte, error)
 	// Get(DeviceID string, opts *GetOptions) (*Device, *Response, error)
 	// Create(*DeviceCreateRequest) (*Device, *Response, error)
 	// Update(string, *DeviceUpdateRequest) (*Device, *Response, error)
@@ -95,8 +95,8 @@ type DedicatedServerService interface {
 }
 
 type dedicatedServersRoot struct {
-	DedicatedServer []DedicatedServer `json:"devices"`
-	Meta            meta              `json:"meta"`
+	DedicatedServer []DedicatedServer `json:"servers"`
+	Meta            meta              `json:"_metadata"`
 }
 
 // DedicatedServer represents a Dedicated Server from the Leaseweb API
@@ -121,18 +121,18 @@ type Contract struct { //nolint:golint
 }
 
 type FeatureAvailability struct { //nolint:golint
-	Automation       string `json:"automation"`
-	IpmiReboot       string `json:"ipmiReboot"`
-	PowerCycle       string `json:"powerCycle"`
-	PrivateNetwork   string `json:"privateNetwork"`
-	RemoteManagement string `json:"remoteManagement"`
+	Automation       bool `json:"automation"`
+	IpmiReboot       bool `json:"ipmiReboot"`
+	PowerCycle       bool `json:"powerCycle"`
+	PrivateNetwork   bool `json:"privateNetwork"`
+	RemoteManagement bool `json:"remoteManagement"`
 }
 
 type Location struct { //nolint:golint
-	rack  string `json:"rack"`
-	site  string `json:"site"`
-	suite string `json:"suite"`
-	unit  string `json:"unit"`
+	Rack  string `json:"rack"`
+	Site  string `json:"site"`
+	Suite string `json:"suite"`
+	Unit  string `json:"unit"`
 }
 
 type NetworkInterfaces struct { //nolint:golint
@@ -149,8 +149,8 @@ type Internal struct { //nolint:golint
 }
 
 type Ports struct { //nolint:golint
-	name string `json:"name"`
-	port string `json:"port"`
+	Name string `json:"name"`
+	Port string `json:"port"`
 }
 
 type Public struct { //nolint:golint
@@ -183,15 +183,14 @@ type Rack struct { //nolint:golint
 	Type string `json:"type"`
 }
 
-func (d *DedicatedServerServiceOp) List(opts *ListOptions) (dedicatedServers []DedicatedServer, resp *Response, err error) {
+func (d *DedicatedServerServiceOp) List(opts *ListOptions) (*dedicatedServersRoot, *Response, []byte, error) {
 	endpointPath := dedicatedServerBasePath
 	apiPathQuery := opts.WithQuery(endpointPath)
-	// dedicatedServers = new(DedicatedServer)
-	resp, err = d.client.DoRequest("GET", apiPathQuery, nil, dedicatedServers)
-	println(resp)
+	root := new(dedicatedServersRoot)
+	resp, body, err := d.client.DoRequest("GET", apiPathQuery, nil, root)
+
 	if err != nil {
-		return nil, resp, err
+		return nil, resp, body, err
 	}
-	return nil, resp, err
-	// return &dedicatedServers, resp, nil
+	return root, resp, body, nil
 }
